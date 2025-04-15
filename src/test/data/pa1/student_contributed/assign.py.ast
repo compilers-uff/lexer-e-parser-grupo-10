@@ -1,0 +1,38 @@
+{
+  "kind": "Program",
+  "declarations": [],
+  "statements": [
+    {
+      "kind": "AssignStmt",
+      "targets": [
+        {
+          "kind": "Identifier",
+          "name": "x",
+          "location": [1, 1, 1, 1]
+        }
+      ],
+      "value": {
+        "kind": "BinaryExpr",
+        "operator": "+",
+        "left": {
+          "kind": "IntegerLiteral",
+          "value": 1,
+          "location": [1, 5, 1, 5]
+        },
+        "right": {
+          "kind": "IntegerLiteral",
+          "value": 2,
+          "location": [1, 9, 1, 9]
+        },
+        "location": [1, 5, 1, 9]
+      },
+      "location": [1, 1, 1, 9]
+    }
+  ],
+  "errors": {
+    "kind": "Errors",
+    "errors": [],
+    "location": [0, 0, 0, 0]
+  },
+  "location": [1, 1, 1, 9]
+}
