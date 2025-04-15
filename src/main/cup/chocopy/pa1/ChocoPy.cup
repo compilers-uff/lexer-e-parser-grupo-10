@@ -92,11 +92,8 @@ parser code {:
  **************************************************************************/
 
 
-/* The following code section is copied verbatim to the class that performs
- * production-rule actions. */
 action code {:
 
-    /** Return a mutable list initially containing the single value ITEM. */
     <T> List<T> single(T item) {
         List<T> list = new ArrayList<>();
         if (item != null) {
@@ -105,8 +102,6 @@ action code {:
         return list;
     }
 
-    /** If ITEM is non-null, appends it to the end of LIST.  Then returns
-     *  LIST. */
     <T> List<T> combine(List<T> list, T item) {
         if (item != null) {
             list.add(item);
@@ -114,14 +109,19 @@ action code {:
         return list;
     }
 
-    /** Return a mutable empty list. */
+    /** Se ITEM não for nulo, adiciona-o ao início da LISTA. Em seguida, retorna
+     *  a LISTA. */
+    <T> List<T> combine(T item, List<T> list) {
+        if (item != null) {
+            list.add(0, item);
+        }
+        return list;
+    }
+
     <T> List<T> empty() {
         return new ArrayList<T>();
     }
 
-    /** Return the leftmost non-whitespace location in NODES, or null if NODES
-     *  is empty.  Assumes that the nodes of NODES are ordered in increasing
-     *  order of location, from left to right. */
     ComplexSymbolFactory.Location getLeft(List<? extends Node> nodes) {
         if (nodes.isEmpty()) {
             return null;
@@ -131,84 +131,396 @@ action code {:
                                                  first.getLocation()[1]);
     }
 
+    /** Retorna a loc mais à direita que não seja espaço em branco em NODES, ou null se
+     *  NODES estiver vazio. Assume que os nós de NODES estão ordenados em
+     *  ordem crescente de loc, da esquerda para a direita. */
+    ComplexSymbolFactory.Location getRight(List<? extends Node> nodes) {
+        if (nodes.isEmpty()) {
+            return null;
+        }
+        Node last = nodes.get(nodes.size() - 1);
+        return new ComplexSymbolFactory.Location(last.getLocation()[2],
+                                                 last.getLocation()[3]);
+    }
 :}
 
-/* Terminal symbols (tokens returned by the lexer).  The declaration
- *     terminal <identifier1>, <identifier2>, ...;
- * declares each <identifieri> as the denotation of a distinct type terminal
- * symbol for use in the grammar.  The declaration
- *     terminal <type> <identifier1>, ...;
- * does the same, and in addition indicates that the lexer supplies a
- * semantic value of type <type> for these symbols that may be referenced
- * in actions ( {: ... :} ).
- */
+
 terminal NEWLINE;
-terminal String PLUS; 
-terminal Integer NUMBER; 
-/* Returned by the lexer for erroneous tokens.  Since it does not appear in
- * the grammar, it indicates a syntax error. */
+terminal INDENT, DEDENT;
+terminal FALSE, NONE, TRUE, AND, AWAIT;
+terminal BREAK, CLASS, CONTINUE, DEF, ELIF, ELSE;
+terminal NONLOCAL, FOR, FROM, GLOBAL, IF, IMPORT;
+terminal IN, NOT, OR, PASS, RAISE;
+terminal RETURN, TRY, WHILE;
+terminal UMINUS;
+
+terminal String IDENTIFIER, STRING, IDSTRING;
+terminal String PLUS, MINUS, TIMES, DIVIDE, MOD;
+terminal String LESSTHAN, GREATERTHAN, LESSEQ, GREATEREQ;
+terminal String EQEQ, NOTEQ, EQ;
+terminal String LPAREN, RPAREN, LBRACKET, RBRACKET;
+terminal String COMMA, COLON, DOT, ARROW;
+terminal String IS;
+terminal Integer INTEGER; 
+
 terminal UNRECOGNIZED;   
 
-/* Nonterminal symbols (defined in production rules below).
- * As for terminal symbols, 
- *     non terminal <type> <identifier1>, ..., <identifiern>; 
- * defines the listed nonterminal identifier symbols to have semantic values
- * of type <type>. */
-non terminal Program           program;
-non terminal List<Declaration> program_head;
-non terminal List<Stmt>        stmt_list, opt_stmt_list;
-non terminal Stmt              stmt, expr_stmt;
-non terminal Expr              expr, binary_expr;
+non terminal Program            program;
+non terminal List<Declaration>  program_head;
+non terminal List<Stmt>         stmt_list0, stmt_list1;
+non terminal Identifier         id;
+non terminal ClassDef           class_def;
+non terminal List<Declaration>  class_body, class_body_def_list1;
+non terminal FuncDef            func_def;
+non terminal List<Declaration>  func_head;
+non terminal List<TypedVar>     params, with_params;
+non terminal TypeAnnotation     type;
+non terminal TypedVar           typed_var;
+non terminal GlobalDecl         global_decl;
+non terminal NonLocalDecl       nonlocal_decl;
+non terminal VarDef             var_def;
+non terminal Stmt               stmt, simple_stmt;
+non terminal List<Stmt>         else_block, block;
+non terminal List<Expr>         expr_list1, target_list1;
+non terminal Literal            literal;
+non terminal Expr               expr, cexpr, target;
+non terminal MemberExpr         member_expr;
+non terminal IndexExpr          index_expr;
 
-/* Precedences (lowest to highest) for resolving what would otherwise be
- * ambiguities in the form of shift/reduce conflicts.. */
-precedence left PLUS;
+/* Precedências (da menor para a maior) para resolver ambiguidades que causariam
+ * conflitos de shift/reduce/etc */
+precedence nonassoc IF, ELSE;
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence nonassoc EQEQ, NOTEQ,
+     LESSTHAN, GREATERTHAN, LESSEQ, GREATEREQ, IS;
+precedence left PLUS, MINUS;
+precedence left TIMES, DIVIDE, MOD;
+precedence left UMINUS;
+precedence nonassoc DOT, LBRACKET, RBRACKET;
 
-/* The start symbol. */
 start with program;
-
 
 /*****  GRAMMAR RULES *****/
 
-program ::= program_head:d opt_stmt_list:s
-        {: RESULT = new Program(d.isEmpty() ? getLeft(s) : getLeft(d),
-                                sxright, d, s, errors);
-        :}
-        ;
+/* As regras para ChocoPy */
+program ::= program_head:d stmt_list0:s
+      /* Constrói um nó Program com as declarações e os comandos recebidos. */
+      {: RESULT = new Program(d.isEmpty() ? getLeft(s) : getLeft(d),
+                  getRight(s), d, s, errors);
+      :}
+      ;
 
-/* Initial list of declarations. */
-program_head ::= /* not implemented; currently matches empty string */
-                                     {: RESULT = empty(); :}
-                ;
-
-opt_stmt_list ::=                    {: RESULT = empty(); :}
-                | stmt_list:s        {: RESULT = s; :}
-                ;
-
-stmt_list ::= stmt:s                 {: RESULT = single(s); :}
-            | stmt_list:l stmt:s     {: RESULT = combine(l, s); :}
-            | stmt_list:l error      {: RESULT = l; :}
-            /* If there is a syntax error in the source, this says to discard
-             * symbols from the parsing stack and perform reductions until
-             * there is a stmt_list on top of the stack, and then to discard
-             * input symbols until it is possible to shift again, reporting
-             * a syntax error. */
-            ;
-
-stmt ::= expr_stmt:s NEWLINE {: RESULT = s; :}
-              ;
-
-expr_stmt ::= expr:e    {: RESULT = new ExprStmt(exleft, exright, e); :}
-            ;
-
-expr ::= binary_expr:e  {: RESULT = e; :}
-       | NUMBER:n       {: RESULT = new IntegerLiteral(nxleft, nxright, n); :}
+/* Lista inicial de declarações. */
+program_head ::=                        /* Inicializa uma lista vazia de declarações. */
+         {: RESULT = empty(); :}
+       | program_head:d var_def:x   /* Adiciona uma definição de variável à lista de declarações. */
+       {: RESULT = combine(d, x); :}
+       | program_head:d func_def:x  /* Adiciona uma definição de função à lista de declarações. */
+       {: RESULT = combine(d, x); :}
+       | program_head:d class_def:x /* Adiciona uma definição de classe à lista de declarações. */
+       {: RESULT = combine(d, x); :}
        ;
 
+stmt_list0 ::=                          /* Inicializa uma lista vazia de comandos. */
+         {: RESULT = empty(); :}
+       | stmt:x stmt_list0:l      /* Adiciona um comando à lista de comandos. */
+         {: RESULT = combine(x, l); :}
+       | error stmt_list0:l       /* Pula um comando com erro e continua a análise. */
+         {: RESULT = l; :}
+       ;
 
-/* A binary expression, illustrating how to find the left and right
- * source position of a phrase. */
-binary_expr ::= expr:e1 PLUS:op expr:e2
-                        {: RESULT = new BinaryExpr(e1xleft, e2xright,
-                                                   e1, op, e2); :}
+id ::= IDENTIFIER:id                    
+     /* Constrói um nó Identifier utilizando o identificador fornecido. */
+     {: RESULT = new Identifier(idxleft, idxright, id); :}
+   ;
+      
+class_def ::= CLASS:kw id:id1 LPAREN id:id2 RPAREN COLON NEWLINE INDENT class_body:body DEDENT 
+              /* Constrói um nó ClassDef com o nome da classe, o nome da superclasse e o corpo. */
+              {: RESULT = new ClassDef(kwxleft, getRight(body), id1, id2, body);:}
+            ;
+
+class_body ::= PASS NEWLINE             /* Representa um corpo de classe vazio. */
+         {: RESULT = empty(); :}
+       | class_body_def_list1:l   /* Representa uma lista de definições internas à classe. */
+         {: RESULT = l; :}
+       ;
+      
+class_body_def_list1 ::= var_def:x      /* Adiciona uma definição de variável no corpo da classe. */
+             {: RESULT = single(x); :}
+             | func_def:x     /* Adiciona uma definição de função no corpo da classe. */
+             {: RESULT = single(x); :}
+             | class_body_def_list1:l var_def:x   /* Combina várias definições de variável no corpo da classe. */
+             {: RESULT = combine(l, x); :}
+             | class_body_def_list1:l func_def:x  /* Combina várias definições de função no corpo da classe. */
+             {: RESULT = combine(l, x); :}
+             ;
+          
+func_def ::= DEF:def id:id LPAREN params:paras RPAREN COLON:colon NEWLINE INDENT func_head:d stmt_list1:l DEDENT
+             /* Constrói uma definição de função sem um tipo de retorno explicitado.
+              * O tipo de retorno é definido como "<None>" por padrão. */
+             {: ClassType rtn_type = new ClassType(colonxleft, colonxright, "<None>");
+                RESULT = new FuncDef(defxleft, getRight(l), 
+                                    id, paras, rtn_type, d, l); 
+             :}
+           | DEF:def id:id LPAREN params:paras RPAREN ARROW type:rtn_type COLON NEWLINE INDENT func_head:d stmt_list1:l DEDENT
+             /* Constrói uma definição de função com um tipo de retorno explicitado. */
+             {: RESULT = new FuncDef(defxleft, getRight(l), 
+                                    id, paras, rtn_type, d, l); 
+             :}
+           ;
+
+params ::=                              /* Representa uma lista de parâmetros vazia. */
+       {: RESULT = empty(); :}
+     | with_params:with_p           /* Representa uma lista de parâmetros. */
+       {: RESULT = with_p; :}
+     ;    
+
+with_params ::= typed_var:x                     /* Adiciona uma única variável tipada à lista de parâmetros. */
+        {: RESULT = single(x); :}
+        | with_params:l COMMA typed_var:x /* Combina várias variáveis tipadas na lista de parâmetros. */
+        {: RESULT = combine(l, x); :}
+        ;
+
+func_head ::=                               /* Representa um cabeçalho de função vazio (declarações internas). */
+            {: RESULT = empty(); :}
+            | func_head:l global_decl:x     /* Adiciona uma declaração global ao cabeçalho da função. */
+            {: RESULT = combine(l, x); :}
+            | func_head:l nonlocal_decl:x   /* Adiciona uma declaração não-local ao cabeçalho da função. */
+            {: RESULT = combine(l, x); :}
+            | func_head:l var_def:x         /* Adiciona uma definição de variável ao cabeçalho da função. */
+            {: RESULT = combine(l, x); :}
+            | func_head:l func_def:x        /* Adiciona uma definição de função ao cabeçalho da função. */
+            {: RESULT = combine(l, x); :}
+            ;
+
+stmt_list1 ::= stmt:x                       /* Adiciona um único comando à lista. */
+         {: RESULT = single(x); :}
+       | stmt_list1:l stmt:x          /* Combina vários comandos em uma lista. */
+         {: RESULT = combine(l, x); :}
+       ;
+
+typed_var ::= id:id COLON type:type      
+              /* Constrói um nó TypedVar com o identificador e o tipo fornecidos. */
+              {: RESULT = new TypedVar(idxleft, typexright,
+                                       id, type);
+              :}
+            ;
+
+type ::= IDENTIFIER:id              
+         /* Constrói um nó ClassType com o identificador. */
+         {: RESULT = new ClassType(idxleft, idxright, id); :}    
+       | IDSTRING:idstr              
+         /* Constrói um nó ClassType utilizando o IDSTRING fornecido. */
+         {: RESULT = new ClassType(idstrxleft, idstrxright, idstr); :}
+       | LBRACKET:lp type:type RBRACKET:rp     
+         /* Constrói um nó ListType utilizando o tipo especificado. */
+         {: RESULT = new ListType(lpxleft, rpxright, type); :}
+       ;
+
+global_decl ::= GLOBAL:kw id:id NEWLINE
+                /* Constrói um nó GlobalDecl com o identificador dado. */
+                {: RESULT = new GlobalDecl(kwxleft, idxright, id); :}
+                ;
+
+nonlocal_decl ::= NONLOCAL:kw id:id NEWLINE
+                  /* Constrói um nó NonLocalDecl com o identificador dado. */
+                  {: RESULT = new NonLocalDecl(kwxleft, idxright, id); :}
+                ;
+
+var_def ::= typed_var:var EQ literal:liter NEWLINE
+            /* Constrói um nó VarDef com a variável tipada e o literal fornecidos. */
+            {: RESULT = new VarDef(varxleft, literxright,
+                                   var, liter);
+            :}
+          ;
+        
+stmt ::= simple_stmt:s NEWLINE
+         /* Representa um comando simples. */
+         {: RESULT = s; :}
+       | IF:if_t expr:e COLON block:block else_block:el_block
+         /* Constrói um nó IfStmt com a condição, o bloco principal e o bloco else (ou elif).
+          * A variável 'right' é calculada a partir do final do bloco ou do bloco else, se houver. */
+         {: Location right = block.isEmpty() ? exright : getRight(block);
+            right = el_block.isEmpty() ? right : getRight(el_block);
+            RESULT = new IfStmt(if_txleft, right,
+                                e, block, el_block);
+         :}
+       | WHILE:kw expr:e COLON:colon block:block
+         /* Constrói um nó WhileStmt com a condição e o bloco de comandos. */
+         {: RESULT = new WhileStmt(kwxleft, block.isEmpty() ? colonxright : getRight(block), 
+                                   e, block);
+         :}
+       | FOR:kw id:id IN expr:e COLON:colon block:block
+         /* Constrói um nó ForStmt com o identificador do iterador, o iterável e o bloco de comandos. */
+         {: RESULT = new ForStmt(kwxleft, block.isEmpty() ? colonxright : getRight(block), 
+                                  id, e, block);
+         :}
+       ;
+
+else_block ::=                      /* Representa um bloco else vazio. */
+         {: RESULT = empty(); :}
+       | ELSE COLON block:b   /* Representa um bloco else com comandos. */
+         {: RESULT = b; :}
+       | ELIF:elif expr:e COLON block:block else_block:el_block
+         /* Constrói um nó IfStmt para um bloco elif, combinando a condição, o bloco e o bloco else subsequente. */
+         {: Location right = block.isEmpty() ? exright : getRight(block);
+            right = el_block.isEmpty() ? right : getRight(el_block);
+            IfStmt ifStmt = new IfStmt(elifxleft, right,
+                                       e, block, el_block);
+            RESULT = single(ifStmt);                  
+         :}
+       ;
+
+simple_stmt ::= PASS                /* Representa um comando pass. */
+                {: RESULT = null; :}
+              // | error
+              | expr:e              /* Constrói um nó ExprStmt com a expressão dada. */
+                {: RESULT = new ExprStmt(exleft, exright, e); :}
+              | RETURN:rtn expr:e   /* Constrói um nó ReturnStmt com a expressão dada. */
+                {: RESULT = new ReturnStmt(rtnxleft, exright, e); :}
+              | RETURN:rtn          /* Constrói um nó ReturnStmt sem expressão. */
+                {: RESULT = new ReturnStmt(rtnxleft, rtnxright, null); :}
+              | target_list1:l expr:e   
+                /* Constrói um nó AssignStmt com os alvos e a expressão de atribuição. */
+                {: RESULT = new AssignStmt(getLeft(l), exright, l, e); :}
               ;
+
+target_list1 ::= target:tar EQ      /* Adiciona um único alvo à lista. */
+         {: RESULT = single(tar); :}
+         | target_list1:l target:tar EQ
+         /* Combina múltiplos alvos em uma lista (para atribuições múltiplas). */
+         {: RESULT = combine(l, tar); :}
+         ;
+    
+block ::= NEWLINE INDENT stmt_list1:l DEDENT
+          /* Representa um bloco de comandos, delimitado por indentação. */
+          {: RESULT = l; :}
+        ;
+
+literal ::= NONE:liter        /* Constrói um nó NoneLiteral. */
+          {: RESULT = new NoneLiteral(literxleft, literxright); :}
+          | TRUE:liter        /* Constrói um nó BooleanLiteral para true. */
+          {: RESULT = new BooleanLiteral(literxleft, literxright, true); :}
+          | FALSE:liter       /* Constrói um nó BooleanLiteral para false. */
+          {: RESULT = new BooleanLiteral(literxleft, literxright, false); :}
+          | INTEGER:liter     /* Constrói um nó IntegerLiteral. */
+          {: RESULT = new IntegerLiteral(literxleft, literxright, liter); :}
+          | IDSTRING:liter    /* Constrói um nó StringLiteral com ID string. */
+          {: RESULT = new StringLiteral(literxleft, literxright, liter); :}
+          | STRING:liter      /* Constrói um nó StringLiteral com string. */
+          {: RESULT = new StringLiteral(literxleft, literxright, liter); :}
+          ;
+
+expr ::= cexpr:e                /* Retorna a expressão básica (cexpr). */
+       {: RESULT = e; :}
+       | NOT:not expr:e         /* Constrói um nó UnaryExpr para o operador not. */
+         {: RESULT = new UnaryExpr(notxleft, exright, "not", e); :}
+       | expr:e1 AND expr:e2    /* Constrói um nó BinaryExpr para o operador and. */
+         {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, "and", e2); :}
+       | expr:e1 OR expr:e2     /* Constrói um nó BinaryExpr para o operador or. */
+         {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, "or", e2); :}
+       | cexpr:e1 IF expr:e2 ELSE expr:e3
+         /* Constrói um nó IfExpr para expressão condicional (ternário). */
+         {: RESULT = new IfExpr(e1xleft, e3xright, e2, e1, e3); :}
+       ;
+
+cexpr ::= id:id                 /* Uma expressão básica que é apenas um identificador. */
+        {: RESULT = id; :}
+        | literal:liter         /* Ou um literal (número, string, etc.). */
+          {: RESULT = liter; :}
+        | LBRACKET RBRACKET     /* Ou uma lista vazia. */
+          {: RESULT = null; :}
+        | LBRACKET:lb expr_list1:l RBRACKET:rb
+          /* Constrói um nó ListExpr a partir de uma lista de expressões. */
+          {: RESULT = new ListExpr(lbxleft, rbxright, l); :}
+        | LPAREN expr:e RPAREN  /* Ou uma expressão entre parênteses. */
+          {: RESULT = e; :}
+        | member_expr:e         /* Ou um acesso a membro. */
+          {: RESULT = e; :}
+        | index_expr:e          /* Ou um acesso via índice. */
+          {: RESULT = e; :}
+        | member_expr:e LPAREN RPAREN:rb
+          /* Constrói um nó MethodCallExpr para uma chamada de método sem argumentos. */
+          {: RESULT = new MethodCallExpr(exleft, rbxright, e, empty()); :}
+        | member_expr:e LPAREN expr_list1:l RPAREN:rb
+          /* Constrói um nó MethodCallExpr para uma chamada de método com argumentos. */
+          {: RESULT = new MethodCallExpr(exleft, rbxright, e, l); :}
+        | id:id LPAREN RPAREN:rb
+          /* Constrói um nó CallExpr para uma chamada de função sem argumentos. */
+          {: RESULT = new CallExpr(idxleft, rbxright, id, empty()); :}
+        | id:id LPAREN expr_list1:l RPAREN:rb
+          /* Constrói um nó CallExpr para uma chamada de função com argumentos. */
+          {: RESULT = new CallExpr(idxleft, rbxright, id, l); :}
+        | cexpr:e1 PLUS:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a soma. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 MINUS:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a subtração. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 TIMES:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a multiplicação. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 DIVIDE:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a divisão. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 MOD:op cexpr:e2
+          /* Constrói um nó BinaryExpr para o operador módulo. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 EQEQ:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de igualdade. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 NOTEQ:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de desigualdade. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 LESSEQ:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de menor ou igual. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 LESSTHAN:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de menor que. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 GREATEREQ:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de maior ou igual. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 GREATERTHAN:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de maior que. */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | cexpr:e1 IS:op cexpr:e2
+          /* Constrói um nó BinaryExpr para a comparação de identidade (IS). */
+          {: RESULT = new BinaryExpr(e1xleft, e2xright, e1, op, e2); :}
+        | MINUS:minus cexpr:e 
+          /* Constrói um nó UnaryExpr para a negação. */
+          {: RESULT = new UnaryExpr(minusxleft, exright, "-", e); :}
+          %prec UMINUS
+        ;
+    
+/* Produção para uma lista de expressões separadas por vírgula. */
+expr_list1 ::= expr:e           /* Retorna uma lista com uma única expressão. */
+             {: RESULT = single(e); :}
+             | expr_list1:l COMMA expr:e
+               /* Combina uma lista existente com uma nova expressão. */
+               {: RESULT = combine(l, e); :}
+             ;
+
+/* Produção para acesso a membros, por exemplo, objeto.identificador. */
+member_expr ::= cexpr:e DOT id:id
+                /* Cria um nó MemberExpr com o objeto e o membro. */
+                {: RESULT = new MemberExpr(exleft, idxright, e, id); :}
+              ;
+
+/* Produção para acesso via índice, por exemplo, objeto[expressão]. */
+index_expr ::= cexpr:e1 LBRACKET expr:e2 RBRACKET:rb
+               /* Cria um nó IndexExpr com o objeto e o índice. */
+               {: RESULT = new IndexExpr(e1xleft, rbxright, e1, e2); :}
+             ;
+
+/* Produção para um alvo (target) de atribuição, que pode ser um identificador,
+   um acesso a membro ou um acesso via índice. */
+target ::= id:id            /* Um identificador simples. */
+         {: RESULT = id; :}
+         | member_expr:e    /* Ou um acesso a membro. */
+           {: RESULT = e; :}
+         | index_expr:e     /* Ou um acesso via índice. */
+           {: RESULT = e; :}
+         ;
