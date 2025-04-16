@@ -9,6 +9,19 @@ x = 10
 y = x + 5
 z = x * y
 
+# Atribuições múltiplas e encadeadas
+a = b = c = 0
+x = y = z = a + b
+i = j = k = 1 + 2 * 3
+
+# Atribuições com indexação e atributos
+lista = [1, 2, 3]
+lista[0] = lista[1] = 5
+objeto = None
+x = y = z = 42
+x = y = objeto.atributo = 100
+lista[0] = y = objeto.metodo = 200
+
 # Estruturas de controle
 if x > 0:
     print(x)
