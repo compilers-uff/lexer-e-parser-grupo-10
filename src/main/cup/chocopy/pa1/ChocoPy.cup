@@ -148,31 +148,31 @@ action code {:
 terminal NEWLINE;
 terminal INDENT, DEDENT;
 terminal FALSE, NONE, TRUE, AND, AWAIT;
-terminal BREAK, CLASS, CONTINUE, DEF, ELIF, ELSE;
 terminal NONLOCAL, FOR, FROM, GLOBAL, IF, IMPORT;
-terminal IN, NOT, OR, PASS, RAISE;
+terminal BREAK, CLASS, CONTINUE, DEF, ELIF, ELSE;
 terminal RETURN, TRY, WHILE;
+terminal IN, NOT, OR, PASS, RAISE;
 terminal UMINUS;
 
 terminal String IDENTIFIER, STRING, IDSTRING;
 terminal String PLUS, MINUS, TIMES, DIVIDE, MOD;
-terminal String LESSTHAN, GREATERTHAN, LESSEQ, GREATEREQ;
 terminal String EQEQ, NOTEQ, EQ;
-terminal String LPAREN, RPAREN, LBRACKET, RBRACKET;
+terminal String LESSTHAN, GREATERTHAN, LESSEQ, GREATEREQ;
 terminal String COMMA, COLON, DOT, ARROW;
-terminal String IS;
+terminal String LPAREN, RPAREN, LBRACKET, RBRACKET;
 terminal Integer INTEGER; 
+terminal String IS;
 
 terminal UNRECOGNIZED;   
 
-non terminal Program            program;
-non terminal List<Declaration>  program_head;
+non terminal Program            prog;
+non terminal List<Declaration>  root;
 non terminal List<Stmt>         stmt_list0, stmt_list1;
 non terminal Identifier         id;
 non terminal ClassDef           class_def;
 non terminal List<Declaration>  class_body, class_body_def_list1;
 non terminal FuncDef            func_def;
-non terminal List<Declaration>  func_head;
+non terminal List<Declaration>  func_root;
 non terminal List<TypedVar>     params, with_params;
 non terminal TypeAnnotation     type;
 non terminal TypedVar           typed_var;
@@ -200,12 +200,12 @@ precedence left TIMES, DIVIDE, MOD;
 precedence left UMINUS;
 precedence nonassoc DOT, LBRACKET, RBRACKET;
 
-start with program;
+start with prog;
 
 /*****  GRAMMAR RULES *****/
 
 /* As regras para ChocoPy */
-program ::= program_head:d stmt_list0:s
+prog ::= root:d stmt_list0:s
       /* Constrói um nó Program com as declarações e os comandos recebidos. */
       {: RESULT = new Program(d.isEmpty() ? getLeft(s) : getLeft(d),
                   getRight(s), d, s, errors);
@@ -213,13 +213,13 @@ program ::= program_head:d stmt_list0:s
       ;
 
 /* Lista inicial de declarações. */
-program_head ::=                        /* Inicializa uma lista vazia de declarações. */
+root ::=                        /* Inicializa uma lista vazia de declarações. */
          {: RESULT = empty(); :}
-       | program_head:d var_def:x   /* Adiciona uma definição de variável à lista de declarações. */
+       | root:d var_def:x   /* Adiciona uma definição de variável à lista de declarações. */
        {: RESULT = combine(d, x); :}
-       | program_head:d func_def:x  /* Adiciona uma definição de função à lista de declarações. */
+       | root:d func_def:x  /* Adiciona uma definição de função à lista de declarações. */
        {: RESULT = combine(d, x); :}
-       | program_head:d class_def:x /* Adiciona uma definição de classe à lista de declarações. */
+       | root:d class_def:x /* Adiciona uma definição de classe à lista de declarações. */
        {: RESULT = combine(d, x); :}
        ;
 
@@ -257,14 +257,14 @@ class_body_def_list1 ::= var_def:x      /* Adiciona uma definição de variável
              {: RESULT = combine(l, x); :}
              ;
           
-func_def ::= DEF:def id:id LPAREN params:paras RPAREN COLON:colon NEWLINE INDENT func_head:d stmt_list1:l DEDENT
+func_def ::= DEF:def id:id LPAREN params:paras RPAREN COLON:colon NEWLINE INDENT func_root:d stmt_list1:l DEDENT
              /* Constrói uma definição de função sem um tipo de retorno explicitado.
               * O tipo de retorno é definido como "<None>" por padrão. */
              {: ClassType rtn_type = new ClassType(colonxleft, colonxright, "<None>");
                 RESULT = new FuncDef(defxleft, getRight(l), 
                                     id, paras, rtn_type, d, l); 
              :}
-           | DEF:def id:id LPAREN params:paras RPAREN ARROW type:rtn_type COLON NEWLINE INDENT func_head:d stmt_list1:l DEDENT
+           | DEF:def id:id LPAREN params:paras RPAREN ARROW type:rtn_type COLON NEWLINE INDENT func_root:d stmt_list1:l DEDENT
              /* Constrói uma definição de função com um tipo de retorno explicitado. */
              {: RESULT = new FuncDef(defxleft, getRight(l), 
                                     id, paras, rtn_type, d, l); 
@@ -283,15 +283,15 @@ with_params ::= typed_var:x                     /* Adiciona uma única variável
         {: RESULT = combine(l, x); :}
         ;
 
-func_head ::=                               /* Representa um cabeçalho de função vazio (declarações internas). */
+func_root ::=                               /* Representa um cabeçalho de função vazio (declarações internas). */
             {: RESULT = empty(); :}
-            | func_head:l global_decl:x     /* Adiciona uma declaração global ao cabeçalho da função. */
+            | func_root:l global_decl:x     /* Adiciona uma declaração global ao cabeçalho da função. */
             {: RESULT = combine(l, x); :}
-            | func_head:l nonlocal_decl:x   /* Adiciona uma declaração não-local ao cabeçalho da função. */
+            | func_root:l nonlocal_decl:x   /* Adiciona uma declaração não-local ao cabeçalho da função. */
             {: RESULT = combine(l, x); :}
-            | func_head:l var_def:x         /* Adiciona uma definição de variável ao cabeçalho da função. */
+            | func_root:l var_def:x         /* Adiciona uma definição de variável ao cabeçalho da função. */
             {: RESULT = combine(l, x); :}
-            | func_head:l func_def:x        /* Adiciona uma definição de função ao cabeçalho da função. */
+            | func_root:l func_def:x        /* Adiciona uma definição de função ao cabeçalho da função. */
             {: RESULT = combine(l, x); :}
             ;
 
