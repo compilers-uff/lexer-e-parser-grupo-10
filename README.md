@@ -96,13 +96,3 @@ Implementar isso corretamente envolveu:
 
 target_list1 e simple_stmt -> linha 375 até 395
 member_expr, target e index_expr -> linha 507 até 527
-
-
-#gerar ast
-java -cp "chocopy-ref.jar;target/assignment.jar" chocopy.ChocoPy --pass=r src/test/data/pa1/sample/<input>.py
-java -cp "chocopy-ref.jar;target/assignment.jar" chocopy.ChocoPy --pass=r \src\test\data\pa1\student_contributed\ 
-#compilar
-mvn clean package
-
-#testar tudo
-java -cp "chocopy-ref.jar;target/assignment.jar" chocopy.ChocoPy --pass=s --test --dir src/test/data/pa1/sample/
